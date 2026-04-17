@@ -1,6 +1,5 @@
 from ursina import *
 from ursina.prefabs.first_person_controller import FirstPersonController
-import random
 import time
 
 app = Ursina()
@@ -8,41 +7,75 @@ app = Ursina()
 # ---------------- WORLD ----------------
 Sky()
 
-ground = Entity(
-    model='plane',
-    scale=(80, 1, 80),
-    texture='white_cube',
-    texture_scale=(80, 80),
-    collider='box',
-    color=color.dark_gray
-)
-
 DirectionalLight().look_at(Vec3(1, -1, -1))
 AmbientLight(color=color.rgba(120, 120, 120, 0.5))
 
-# cover / map objects
-cover_positions = [
-    (-6,1,-6),(6,1,-6),(-6,1,6),(6,1,6),
-    (0,1,-8),(0,1,8),(-8,1,0),(8,1,0)
-]
-
-for p in cover_positions:
-    Entity(
+# ---------------- MAP ----------------
+def make_block(position, scale=(2,2,2), color=color.gray):
+    return Entity(
         model='cube',
-        color=color.gray,
-        scale=(2,2,2),
-        position=p,
+        position=position,
+        scale=scale,
+        color=color,
         collider='box'
     )
+
+def build_map():
+
+    # ✅ GROUND (MUST BE HERE FOR STABLE COLLISION)
+    Entity(
+        model='cube',
+        scale=(100, 1, 100),
+        position=(0, 0, 0),
+        collider='box',
+        color=color.dark_gray
+    )
+
+    # MID
+    make_block((0, 1, 0), scale=(4,2,2), color=color.orange)
+    make_block((4, 1, -4), scale=(2,3,2), color=color.orange)
+    make_block((-4, 1, 4), scale=(2,3,2), color=color.orange)
+
+    make_block((0, 1, 8), scale=(12,2,2))
+    make_block((0, 1, -8), scale=(12,2,2))
+
+    # A SITE
+    make_block((-8, 1, 10), scale=(4,2,2), color=color.red)
+    make_block((-12, 1, 16), scale=(3,2,3), color=color.red)
+    make_block((-8, 1, 20), scale=(2,2,4), color=color.red)
+    make_block((-14, 2, 18), scale=(2,1,2), color=color.yellow)
+
+    # B SITE
+    make_block((8, 1, 10), scale=(4,2,2), color=color.green)
+    make_block((12, 1, 16), scale=(2,2,6), color=color.green)
+    make_block((8, 1, 20), scale=(4,2,2), color=color.green)
+    make_block((14, 1, 22), scale=(2,3,2), color=color.green)
+
+    # ROTATION
+    make_block((-4, 1, 12), scale=(2,2,2))
+    make_block((4, 1, 12), scale=(2,2,2))
+
+    # BOUNDS
+    make_block((0, 1, -30), scale=(60,2,2))
+    make_block((0, 1, 30), scale=(60,2,2))
+    make_block((-30, 1, 0), scale=(2,2,60))
+    make_block((30, 1, 0), scale=(2,2,60))
+
+build_map()
 
 # ---------------- PLAYER ----------------
 player = FirstPersonController()
 player.cursor.visible = False
 player.speed = 6
 player.health = 100
+player.position = (0, 5, -20)
 
-# ---------------- CAMERA SETTINGS ----------------
 camera.fov = 80
+
+# ---------------- SAFETY NET (PREVENT FALLING BUGS) ----------------
+def safety_check():
+    if player.y < -10:
+        player.position = (0, 5, -20)
 
 # ---------------- UI ----------------
 crosshair = Entity(parent=camera.ui, model='quad', color=color.white, scale=0.008)
@@ -61,8 +94,6 @@ damage_flash = Entity(
     enabled=False
 )
 
-reload_text = None
-
 # ---------------- WEAPONS ----------------
 weapon = "rifle"
 
@@ -76,11 +107,10 @@ max_ammo = 30
 reloading = False
 last_shot = 0
 
-# recoil system
 recoil = 0
 recoil_return_speed = 6
 
-# ---------------- GUN VISUAL ----------------
+# ---------------- GUN ----------------
 gun = Entity(
     parent=camera,
     model='cube',
@@ -103,20 +133,26 @@ muzzle_flash = Entity(
 enemies = []
 enemy_last_shot = {}
 
-def spawn_enemy(pos):
-    e = Entity(
-        model='cube',
-        color=color.red,
-        scale=(1,2,1),
-        position=pos,
-        collider='box'
-    )
-    e.health = 100
-    enemies.append(e)
-    enemy_last_shot[e] = time.time()
+enemy_spawns = [
+    (-10, 2, 18),
+    (10, 2, 18),
+    (0, 2, 10)
+]
 
-for i in range(6):
-    spawn_enemy((random.randint(-10,10),1,random.randint(-10,10)))
+def spawn_enemies():
+    for pos in enemy_spawns:
+        e = Entity(
+            model='cube',
+            color=color.red,
+            scale=(1,2,1),
+            position=pos,
+            collider='box'
+        )
+        e.health = 100
+        enemies.append(e)
+        enemy_last_shot[e] = time.time()
+
+spawn_enemies()
 
 # ---------------- SHOOT ----------------
 def shoot():
@@ -136,15 +172,12 @@ def shoot():
     last_shot = time.time()
     ammo -= 1
 
-    # recoil
     recoil += w["spread"]
     camera.rotation_x -= recoil
 
-    # muzzle flash
     muzzle_flash.enabled = True
     invoke(setattr, muzzle_flash, 'enabled', False, delay=0.05)
 
-    # FOV kick
     camera.fov = 85
     invoke(setattr, camera, 'fov', 80, delay=0.05)
 
@@ -161,58 +194,50 @@ def shoot():
 
         if hit.entity.health <= 0:
             destroy(hit.entity)
+            if hit.entity in enemies:
+                enemies.remove(hit.entity)
 
 # ---------------- RELOAD ----------------
 def reload():
-    global ammo, reloading, reload_text
+    global ammo, reloading
 
     if reloading:
         return
 
     reloading = True
-
     reload_text = Text("Reloading...", origin=(0,0), scale=2, color=color.orange)
 
     def finish():
-        global ammo, reloading, reload_text
+        global ammo, reloading
         ammo = max_ammo
         reloading = False
-
-        if reload_text:
-            destroy(reload_text)
-            reload_text = None
+        destroy(reload_text)
 
     invoke(finish, delay=1.5)
 
 # ---------------- ENEMY AI ----------------
 def enemy_ai():
     for e in enemies:
-        if not e:
-            continue
-
         dist = distance(e.position, player.position)
-        e.look_at(player.position)
 
-        if dist > 5:
-            e.position += e.forward * time.dt * 1.5
+        if dist < 15:
+            e.look_at(player)
 
-        if dist < 25:
-            if time.time() - enemy_last_shot[e] > 1.2:
-                enemy_last_shot[e] = time.time()
+            if dist > 3:
+                e.position += e.forward * time.dt * 2
 
-                player.health -= 5
+            if dist < 5:
+                if time.time() - enemy_last_shot[e] > 2.0:
+                    enemy_last_shot[e] = time.time()
 
-                if player.health < 0:
-                    player.health = 0
+                    player.health -= 5
 
-                damage_flash.enabled = True
-                invoke(setattr, damage_flash, 'enabled', False, delay=0.1)
+                    damage_flash.enabled = True
+                    invoke(setattr, damage_flash, 'enabled', False, delay=0.1)
 
-                camera.position += Vec3(random.uniform(-0.05,0.05), random.uniform(-0.05,0.05), 0)
-
-                if player.health <= 0:
-                    print("YOU DIED")
-                    application.pause()
+                    if player.health <= 0:
+                        print("YOU DIED")
+                        application.pause()
 
 # ---------------- INPUT ----------------
 def input(key):
@@ -234,23 +259,17 @@ def input(key):
 def update():
     global recoil
 
-    # recoil recovery
     recoil = lerp(recoil, 0, recoil_return_speed * time.dt)
     camera.rotation_x = lerp(camera.rotation_x, 0, 5 * time.dt)
 
-    # UI
     ammo_text.text = f"Ammo: {ammo}/{max_ammo}"
     hp_text.text = f"HP: {player.health}"
     weapon_text.text = f"Weapon: {weapon}"
 
-    # enemy AI
     enemy_ai()
+    safety_check()
 
-    # gun sway
     gun.y = -0.4 + sin(time.time() * 3) * 0.01
     gun.x = 0.5 + sin(time.time() * 2) * 0.01
-
-    # camera shake recovery
-    camera.position = lerp(camera.position, Vec3(0,0,0), 5 * time.dt)
 
 app.run()
