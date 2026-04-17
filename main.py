@@ -22,7 +22,7 @@ def make_block(position, scale=(2,2,2), color=color.gray):
 
 def build_map():
 
-    # ✅ GROUND (MUST BE HERE FOR STABLE COLLISION)
+# ---------------- GROUND ----------------
     Entity(
         model='cube',
         scale=(100, 1, 100),
@@ -52,14 +52,14 @@ def build_map():
     make_block((14, 1, 22), scale=(2,3,2), color=color.green)
 
     # ROTATION
-    make_block((-4, 1, 12), scale=(2,2,2))
-    make_block((4, 1, 12), scale=(2,2,2))
+    make_block((-4, 1, 12), scale=(2,2,2), color=color.black)
+    make_block((4, 1, 12), scale=(2,2,2), color=color.black)
 
     # BOUNDS
-    make_block((0, 1, -30), scale=(60,2,2))
-    make_block((0, 1, 30), scale=(60,2,2))
-    make_block((-30, 1, 0), scale=(2,2,60))
-    make_block((30, 1, 0), scale=(2,2,60))
+    make_block((0, 1, -30), scale=(60,2,2), color=color.blue)
+    make_block((0, 1, 30), scale=(60,2,2), color=color.blue)
+    make_block((-30, 1, 0), scale=(2,2,60), color=color.blue)
+    make_block((30, 1, 0), scale=(2,2,60), color=color.blue)
 
 build_map()
 
